@@ -12,18 +12,18 @@
 #include <TMinuit.h>
 #include <TFile.h>
 #include <TTree.h>
-
 std::vector<std::vector<double>> globalData;
 // 读取文件并返回数据
 std::vector<std::vector<double>>readCoordinates(const std::string& filename) {
     std::ifstream infile(filename);
     std::vector<std::vector<double>> data;
-    double x, y, z;
-    while (infile >> x >> y >> z) {
-        data.push_back({x, y, z});
+    double x, y, z,d;
+    while (infile >> x >> y >> z>>d) {
+        data.push_back({x, y, z,d});
     }
     return data;
 }
+
 
 // 将欧拉角转换为旋转矩阵
 std::vector<std::vector<double>> eulerToRotationMatrix(double roll, double pitch, double yaw) {
@@ -67,38 +67,21 @@ std::vector<double> distance(const std::vector<std::vector<double>>& rotationMat
     // 返回旋转后的坐标数组
     return {x, y, z};
 }
-
 double LossFunction(double x,double y,double z,double roll, double pitch, double yaw,std::vector<std::vector<double>> data){
     // 计算旋转矩阵
     std::vector<std::vector<double>> rotationMatrix = eulerToRotationMatrix(roll, pitch, yaw);
 
     double loss = 0.0;
 
-    // 前四个坐标计算 distance(rotationMatrix, data[i] - {x, y, z})[0]^2
-    for (int i = 0; i < 2; ++i) {
+    for (int i = 0; i < data.size(); ++i) {
         std::vector<double> coord = {data[i][0] - x, data[i][1] - y, data[i][2] - z};
-        double dist = distance(rotationMatrix, coord)[0];
+        double dist;
+        dist = distance(rotationMatrix, coord)[data[i][3]];
         loss += dist * dist;
+        
     }
-
-    // 中间四个坐标计算 distance(rotationMatrix, data[i] - {x, y, z})[1]^2
-    for (int i = 2; i < 4; ++i) {
-        std::vector<double> coord = {data[i][0] - x, data[i][1] - y, data[i][2] - z};
-        double dist = distance(rotationMatrix, coord)[1];
-        loss += dist * dist;
-    }
-
-    // 后面四个坐标计算 distance(rotationMatrix, data[i] - {x, y, z})[2]^2
-    for (int i = 4; i < 6; ++i) {
-        std::vector<double> coord = {data[i][0] - x, data[i][1] - y, data[i][2] - z};
-        double dist = distance(rotationMatrix, coord)[2];
-        loss += dist * dist;
-    }
-
     return loss;
 }
-
-
 
 std::vector<double> chi2(double x,double y,double z,double roll, double pitch, double yaw,std::vector<std::vector<double>> data){
 
@@ -106,31 +89,15 @@ std::vector<double> chi2(double x,double y,double z,double roll, double pitch, d
     // 计算旋转矩阵
     std::vector<std::vector<double>> rotationMatrix = eulerToRotationMatrix(roll, pitch, yaw);
 
-    // 前四个坐标计算 distance(rotationMatrix, data[i] - {x, y, z})[0]^2
-    for (int i = 0; i < 2; ++i) {
-        std::vector<double> coord = {data[i][0] - x, data[i][1] - y, data[i][2] - z};
-        double dist = distance(rotationMatrix, coord)[0];
-        chisqure.push_back( dist * dist);
 
-    }
-
-    // 中间四个坐标计算 distance(rotationMatrix, data[i] - {x, y, z})[1]^2
-    for (int i = 2; i < 4; ++i) {
+        for (int i = 0; i < data.size(); ++i) {
         std::vector<double> coord = {data[i][0] - x, data[i][1] - y, data[i][2] - z};
-        double dist = distance(rotationMatrix, coord)[1];
+        double dist;
+        dist = distance(rotationMatrix, coord)[data[i][3]];
         chisqure.push_back( dist * dist);
         
     }
-
-    // 后面四个坐标计算 distance(rotationMatrix, data[i] - {x, y, z})[2]^2
-    for (int i = 4; i < 6; ++i) {
-        std::vector<double> coord = {data[i][0] - x, data[i][1] - y, data[i][2] - z};
-        double dist = distance(rotationMatrix, coord)[2];
-        chisqure.push_back( dist * dist);
-
-    }
     return chisqure;
-
 }
 
 
@@ -147,27 +114,26 @@ void fcn(int& npar, double* deriv, double& f, double par[], int flag) {
 }
 
 
+std::vector<double> BestPrameter(const std::string& filename) {
+    // 读取 mwdc1.txt 文件中的数据
+    globalData = readCoordinates(filename);
 
-
-int targetAndT0_place() {
-
-  // 读取 mwdc1.txt 文件中的数据
-    globalData = readCoordinates("./data_measure/target.txt");
-    // globalData = readCoordinates("./data_measure/T0.txt");
-
- // 创建 TMinuit 对象
+     // 创建 TMinuit 对象
     TMinuit minuit(6);
     minuit.SetFCN(fcn);
 
     // 设置初始参数值和步长
     double vstart[6] = {2000.0 , 768, 6000.0 , 0.0 , 25.0/180.0*3.14, 0.0};
+    //etof
+    // double vstart[6] = {2000.0 , 768, 6000.0 , 3.14, 25.0/180.0*3.14, 0.0};
+
     double step[6] = {0.1, 0.1,0.1, 0.1, 0.1, 0.1};
 
     minuit.DefineParameter(0, "x", vstart[0], step[0], 0 , 0);
     minuit.DefineParameter(1, "y", vstart[1], step[1], 0.0 ,0.0);
     minuit.DefineParameter(2, "z", vstart[2], step[2],0,0);
     minuit.DefineParameter(3, "roll", vstart[3], step[3], 0, 2*M_PI);
-    minuit.DefineParameter(4, "pitch", vstart[4], step[4], -M_PI/2, M_PI/2);
+    minuit.DefineParameter(4, "pitch", vstart[4], step[4], 0, 2*M_PI);
     minuit.DefineParameter(5, "yaw", vstart[5], step[5], 0,2* M_PI);
 
     // 执行最小化
@@ -191,26 +157,60 @@ int targetAndT0_place() {
     std::cout << "pitch = " << pitch << std::endl;
     std::cout << "yaw = " << yaw << std::endl;
 
+    return {x, y, z, roll, pitch, yaw};
+}
+
+// 反向旋转矩阵的列向量
+void reverseRotationMatrixColumns(std::vector<std::vector<double>>& rotationMatrix, const std::vector<std::vector<double>>& globalData,double x,double y,double z) {
+    for (int i = 0; i < 3; ++i) {
+        double sum = 0.0;
+        for (int j = 0; j < globalData.size(); ++j) {
+            sum += 
+              rotationMatrix[0][i] * (globalData[j][0]-x) 
+            + rotationMatrix[1][i] * (globalData[j][1]-y) 
+            + rotationMatrix[2][i] * (globalData[j][2]-z);
+        }
+        if (sum < 0) {
+            for (int row = 0; row < 3; ++row) {
+                rotationMatrix[0][i] = -rotationMatrix[0][i];
+                rotationMatrix[1][i] = -rotationMatrix[1][i];
+                rotationMatrix[2][i] = -rotationMatrix[2][i];
+            }
+            std::cout << "Column " << i << " was reversed." << std::endl;
+        }
+  
+    }
+}
+
+int detector_place_exceptMWDC1() {
+
+    std::vector<std::string> detectorNames = {"eTOF", "MWDC0", "T0", "target"};
+    // std::vector<std::string> detectorNames = {"eTOF"};
+
+    for(const auto& detectorName : detectorNames)
+    {
+        /* code */
+    
+    
+    std::string filename1 = "./data_measure/" + detectorName + ".txt";
+    std::vector<double> params = BestPrameter(filename1);
+
+    double x = params[0];
+    double y = params[1];
+    double z = params[2];
+    double roll = params[3];
+    double pitch = params[4];
+    double yaw = params[5]; 
+
     
     // 生成旋转矩阵
-    std::vector<std::vector<double>> rotationMatrix = eulerToRotationMatrix(roll, pitch, yaw);
 
-    // 将 x, y, z 和旋转矩阵输出到文本文件
-    std::ofstream outfile("output.txt");
-    outfile << x << " " << y << " " << z << std::endl;
-    for (const auto& row : rotationMatrix) {
-        for (double value : row) {
-            outfile << value << " ";
-        }
-        outfile << std::endl;
-    }
-    outfile.close();
 
-            // 计算 chi2
-    std::vector<double> chi2_values = chi2(x, y, z, roll, pitch, yaw, globalData);
+    std::vector<double> chi2_values = chi2(x,y,z,roll,pitch,yaw,globalData);
 
         // 创建 ROOT 文件
-    TFile *file = new TFile("./root_chi2/target_chi2_values.root", "RECREATE");
+    std::string filename2 = "./root_chi2/" + detectorName + "_chi2_values.root";
+    TFile *file = new TFile(filename2.c_str(), "RECREATE");
 
     // 创建 TTree
     TTree *tree = new TTree("chi2_tree", "Chi2 Values Tree");
@@ -224,6 +224,7 @@ int targetAndT0_place() {
     // 填充 TTree
     for (double value : chi2_values) {
         chi2_value = value;
+        std::cout << "chi2" <<detectorName<<" "  << chi2_value << std::endl;
         tree->Fill();
     }
 
@@ -231,7 +232,48 @@ int targetAndT0_place() {
     tree->Write();
     file->Close();
 
+    
+    // 生成旋转矩阵
+    std::vector<std::vector<double>> rotationMatrix = eulerToRotationMatrix(roll, pitch, yaw);
+
+// 反向旋转矩阵的列向量
+    if (/* condition */detectorName == "target")
+    {   
+        int i = 1;
+        for (int row = 0; row < 3; ++row) {
+                rotationMatrix[0][i] = -rotationMatrix[0][i];
+                rotationMatrix[1][i] = -rotationMatrix[1][i];
+                rotationMatrix[2][i] = -rotationMatrix[2][i];
+            }
+                 i = 2;
+        for (int row = 0; row < 3; ++row) {
+                rotationMatrix[0][i] = -rotationMatrix[0][i];
+                rotationMatrix[1][i] = -rotationMatrix[1][i];
+                rotationMatrix[2][i] = -rotationMatrix[2][i];
+            }
+    }
+    else{
+    reverseRotationMatrixColumns(rotationMatrix, globalData,x,y,z);}
+
+    x= x + rotationMatrix[0][0] * 38.1 + rotationMatrix[0][1] * 38.1 + rotationMatrix[0][2] * 38.1;
+    y= y + rotationMatrix[1][0] * 38.1 + rotationMatrix[1][1] * 38.1 + rotationMatrix[1][2] * 38.1;
+    z= z + rotationMatrix[2][0] * 38.1 + rotationMatrix[2][1] * 38.1 + rotationMatrix[2][2] * 38.1;
+
+
+    // 将 x, y, z 和旋转矩阵输出到文本文件
+    std::ofstream outfile("output_" + detectorName+".txt");
+    outfile << x << " " << y << " " << z << std::endl;
+    for (const auto& row : rotationMatrix) {
+        for (double value : row) {
+            outfile << value << " ";
+        }
+        outfile << std::endl;
+    }
+    outfile.close();
+
+    }
+   
+
 
     return 0;
-
 }

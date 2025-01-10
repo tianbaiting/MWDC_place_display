@@ -74,6 +74,8 @@
         "MWDC0_place.C": "cpp",
         "eTOF_display.C": "cpp",
         "eTOF_place.C": "cpp",
-        "tree_out.C": "cpp"
+        "tree_out.C": "cpp",
+        "detector_place_exceptMWDC1.C": "cpp",
+        "transCoord.C": "cpp"
     }
 }

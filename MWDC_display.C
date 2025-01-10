@@ -4,11 +4,17 @@
 #include <TCanvas.h>
 #include <TApplication.h>
 #include <TGLViewer.h>
+#include <TH1F.h>
+#include <TFile.h>
+#include <TTree.h>
+#include <TText.h>
 #include <fstream>
 #include <iostream>
 #include <vector>
 #include <TColor.h>
-
+#include <TMinuit.h>
+#include <TMarker.h>
+#include <TLatex.h>
 // 读取文件并返回数据
 std::vector<std::vector<double>> readDirectionTarget(const std::string& filename) {
     std::ifstream infile(filename);
@@ -70,27 +76,71 @@ void createGeometry(TGeoManager* geom, const std::vector<std::vector<double>>& d
 std::vector<std::vector<double>> readCoordinates(const std::string& filename) {
     std::ifstream infile(filename);
     std::vector<std::vector<double>> data;
-    double x, y, z;
-    while (infile >> x >> y >> z) {
-        data.push_back({x, y, z});
+    double x, y, z,d;
+    while (infile >> x >> y >> z>>d) {
+        data.push_back({x, y, z,d});
     }
     return data;
 }
 
-// 创建几何体并添加球体
-void createSpheres(TGeoManager* geom, const std::vector<std::vector<double>>& coords, double radius) {
+// 读取 chi2 值
+std::vector<double> readChi2Values(const std::string& chi_filename) {
+    std::vector<double> chi2_values;
+    TFile *file = TFile::Open(chi_filename.c_str());
+    if (!file || file->IsZombie()) {
+        std::cerr << "Error opening file " << chi_filename << std::endl;
+        return chi2_values;
+    }
+
+    TTree *tree = nullptr;
+    file->GetObject("chi2_tree", tree);
+    if (!tree) {
+        std::cerr << "Error getting TTree chi2_tree from file" << std::endl;
+        file->Close();
+        return chi2_values;
+    }
+
+    double chi2_value;
+    tree->SetBranchAddress("chi2_value", &chi2_value);
+
+    Long64_t nentries = tree->GetEntries();
+    for (Long64_t i = 0; i < nentries; ++i) {
+        tree->GetEntry(i);
+        chi2_values.push_back(chi2_value);
+    }
+
+    file->Close();
+    return chi2_values;
+}
+
+
+void createSpheres(TGeoManager* geom, const std::vector<std::vector<double>>& coords, double radius, const std::string& chi_filename) {
     TGeoVolume *top = geom->GetTopVolume();
     TGeoMedium *medium = nullptr; // 使用默认介质
 
+   // 读取 chi2 值
+    std::vector<double> chi2_values = readChi2Values(chi_filename);
+
      // 定义颜色数组
-    int colors[] = {kRed, kGreen, kYellow};
-    int numColors = sizeof(colors) / sizeof(colors[0]);
+    int colors[] = {kRed, kGreen, kYellow,kOrange};
 
     for (size_t i = 0; i < coords.size(); ++i) {
         TGeoVolume *sphere = geom->MakeSphere("SPHERE", medium, 0, radius);
-        sphere->SetLineColor(kRed); // 每四个点换一种颜色
+        sphere->SetLineColor(coords[i][3] );
         TGeoTranslation *trans = new TGeoTranslation(coords[i][0], coords[i][1], coords[i][2]);
         top->AddNode(sphere, 0, trans);
+                // 绘制误差
+        if (i < chi2_values.size()) {
+            double error = sqrt(chi2_values[i]);
+            double textX = coords[i][0] + 100;
+            double textY = coords[i][1] + 100;
+            double textZ = coords[i][2];
+            //  TText3D *text = new TText3D(textX, textY, textZ, Form("%.2f", error));
+            // text->SetTextSize(0.02);
+            // text->SetTextColor(kBlack);
+            // text->Draw();
+
+        }
     }
 
 }
@@ -128,49 +178,22 @@ void MWDC_display(bool vis = true) {
     TGeoVolume *top = geom->MakeBox("TOP", nullptr, 20000, 20000, 20000);
     geom->SetTopVolume(top);
 
-          // 读取 data.txt 文件
-    std::vector<std::vector<double>> coordinates = readCoordinates("./data_measure/mwdc0.txt");
-    // 创建几何体并添加球体
-    createSpheres(geom, coordinates, 25.2);
-    // 读取 direction_MWDC1.txt 文件
-    std::vector<std::vector<double>> data_mwdc0 = readDirectionTarget("direction_MWDC0.txt");
-    // 创建几何体并添加第二个长方体
-    createGeometry(geom, data_mwdc0, "BOX_MWDC0");
-
-              
-    std::vector<std::vector<double>> coordinates2 = readCoordinates("./data_measure/eTOF.txt");
-    createSpheres(geom, coordinates2, 25.2);
-    std::vector<std::vector<double>> data_eTOF= readDirectionTarget("direction_eTOF.txt");
-    createGeometry(geom, data_eTOF, "BOX_eTOF");
+          
+   std::vector<std::string> detectorNames = {"eTOF", "MWDC0", "MWDC1", "T0", "target"};
+//    std::vector<std::string> detectorNames = {"eTOF", "MWDC0", "MWDC1", "T0", "target"};
 
 
 
-    std::vector<std::vector<double>> coordinates3 = readCoordinates("./data_measure/MWDC1.txt");
-    createSpheres(geom, coordinates3, 25.2);
-    std::vector<std::vector<double>> data_MWDC1= readDirectionTarget("direction_MWDC1.txt");
-    createGeometry(geom, data_MWDC1, "BOX_MWDC1");
+    for (const auto& detectorName : detectorNames) {
+        std::string filename1 = "./data_measure/" + detectorName + ".txt";
+        std::vector<std::vector<double>> coordinates = readCoordinates(filename1);
+        std::string chi_filename = "./root_chi2/" + detectorName + "_chi2_values.root";
+        createSpheres(geom, coordinates, 38.1, chi_filename);
 
-    std::vector<std::vector<double>> coordinates4 = readCoordinates("./data_measure/target.txt");
-    createSpheres(geom, coordinates4, 16.6);
-    std::vector<std::vector<double>> data_target= readDirectionTarget("direction_target.txt");
-    createGeometry(geom, data_target, "BOX_target");
-
-    std::vector<std::vector<double>> coordinates5 = readCoordinates("./data_measure/T0.txt");
-    createSpheres(geom, coordinates5, 16.6);
-    std::vector<std::vector<double>> data_T0= readDirectionTarget("direction_T0.txt");
-    createGeometry(geom, data_T0, "BOX_T0");
-    // // 读取 direction_target.txt 文件
-    // std::vector<std::vector<double>> data_target = readDirectionTarget("direction_target.txt");
-    // // 创建几何体并添加第一个长方体
-    // createGeometry(geom, data_target, "BOX_TARGET");
-
-    
-
-    // // 读取 direction_MWDC2.txt 文件
-    // std::vector<std::vector<double>> data_mwdc2 = readDirectionTarget("direction_MWDC2.txt");
-    // // 创建几何体并添加第三个长方体
-    // createGeometry(geom, data_mwdc2, "BOX_MWDC2");
-
+        std::string directionFilename = "direction_" + detectorName + ".txt";
+        std::vector<std::vector<double>> data = readDirectionTarget(directionFilename);
+        createGeometry(geom, data, ("BOX_" + detectorName).c_str());
+    }
       // 创建坐标轴
     createAxes(geom);
 

@@ -15,13 +15,14 @@
 
 
 std::vector<std::vector<double>> globalData;
+
 // 读取文件并返回数据
 std::vector<std::vector<double>>readCoordinates(const std::string& filename) {
     std::ifstream infile(filename);
     std::vector<std::vector<double>> data;
-    double x, y, z;
-    while (infile >> x >> y >> z) {
-        data.push_back({x, y, z});
+    double x, y, z,d;
+    while (infile >> x >> y >> z>>d) {
+        data.push_back({x, y, z,d});
     }
     return data;
 }
@@ -75,33 +76,23 @@ double LossFunction(double x,double y,double z,double d,double roll, double pitc
 
     double loss = 0.0;
 
-    // 前四个坐标计算 distance(rotationMatrix, data[i] - {x, y, z})[0]^2
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < data.size(); ++i) {
+    if (/* condition */data[i][3] == 3)
+    {
         std::vector<double> coord = {data[i][0] - x, data[i][1] - y, data[i][2] - z};
-        double dist = distance(rotationMatrix, coord)[0];
+        double dist;
+        dist = distance(rotationMatrix, coord)[2];
+        loss += (dist-d) * (dist-d);
+        }
+    else{
+        std::vector<double> coord = {data[i][0] - x, data[i][1] - y, data[i][2] - z};
+        double dist;
+        dist = distance(rotationMatrix, coord)[data[i][3]];
         loss += dist * dist;
+        }
     }
 
-    // 中间四个坐标计算 distance(rotationMatrix, data[i] - {x, y, z})[1]^2
-    for (int i = 4; i < 8; ++i) {
-        std::vector<double> coord = {data[i][0] - x, data[i][1] - y, data[i][2] - z};
-        double dist = distance(rotationMatrix, coord)[1];
-        loss += dist * dist;
-    }
 
-    // 后面四个坐标计算 distance(rotationMatrix, data[i] - {x, y, z})[2]^2
-    for (int i = 8; i < 12; ++i) {
-        std::vector<double> coord = {data[i][0] - x, data[i][1] - y, data[i][2] - z};
-        double dist = distance(rotationMatrix, coord)[2];
-        loss += dist * dist;
-    }
-
-    for(int i = 12 ; i<16; ++i){
-    
-        std::vector<double> coord = {data[i][0] - x, data[i][1] - y, data[i][2] - z};
-        double dist = distance(rotationMatrix, coord)[2]-d;
-        loss += dist * dist;
-    }
 
     return loss;
 }
@@ -112,36 +103,23 @@ std::vector<double> chi2(double x,double y,double z,double d,double roll, double
     // 计算旋转矩阵
     std::vector<std::vector<double>> rotationMatrix = eulerToRotationMatrix(roll, pitch, yaw);
 
-    // 前四个坐标计算 distance(rotationMatrix, data[i] - {x, y, z})[0]^2
-    for (int i = 0; i < 4; ++i) {
-        std::vector<double> coord = {data[i][0] - x, data[i][1] - y, data[i][2] - z};
-        double dist = distance(rotationMatrix, coord)[0];
-        chisqure.push_back( dist * dist);
 
+        for (int i = 0; i < data.size(); ++i) {
+    if (/* condition */data[i][3] == 3)
+    {
+        std::vector<double> coord = {data[i][0] - x, data[i][1] - y, data[i][2] - z};
+        double dist;
+        dist = distance(rotationMatrix, coord)[2]-d;
+        chisqure.push_back( dist * dist);
+        }
+    else{
+        std::vector<double> coord = {data[i][0] - x, data[i][1] - y, data[i][2] - z};
+        double dist;
+        dist = distance(rotationMatrix, coord)[data[i][3]];
+        chisqure.push_back( dist * dist);
+        }
     }
 
-    // 中间四个坐标计算 distance(rotationMatrix, data[i] - {x, y, z})[1]^2
-    for (int i = 4; i < 8; ++i) {
-        std::vector<double> coord = {data[i][0] - x, data[i][1] - y, data[i][2] - z};
-        double dist = distance(rotationMatrix, coord)[1];
-        chisqure.push_back( dist * dist);
-        
-    }
-
-    // 后面四个坐标计算 distance(rotationMatrix, data[i] - {x, y, z})[2]^2
-    for (int i = 8; i < 12; ++i) {
-        std::vector<double> coord = {data[i][0] - x, data[i][1] - y, data[i][2] - z};
-        double dist = distance(rotationMatrix, coord)[2];
-        chisqure.push_back( dist * dist);
-
-    }
-
-    for(int i = 12 ; i<16; ++i){
-    
-        std::vector<double> coord = {data[i][0] - x, data[i][1] - y, data[i][2] - z};
-        double dist = distance(rotationMatrix, coord)[2]-d;
-        chisqure.push_back( dist * dist);
-    }
     return chisqure;
 
 }
@@ -159,20 +137,43 @@ void fcn(int& npar, double* deriv, double& f, double par[], int flag) {
     f = LossFunction(x, y, z,d, roll, pitch, yaw, globalData);
 }
 
-
-
-int MWDC1_place() {
-
-  // 读取 mwdc1.txt 文件中的数据
-    globalData = readCoordinates("./data_measure/MWDC1.txt");
+std::vector<double> BestPrameter(const std::string& filename) {
+    // 读取 mwdc1.txt 文件中的数据
+    globalData = readCoordinates(filename);
 
     // 创建 TMinuit 对象
     TMinuit minuit(7);
     minuit.SetFCN(fcn);
 
-    // 设置初始参数值和步长
-    double vstart[7] = {2000.0 , 602, 5000.0 ,50.0, 3.14/2 ,3.14- 25.0/180.0*3.14, 0.0};
-    double step[7] = {0.1, 0.1,0.1, 0.1, 0.1, 0.1,0.1};
+    //固定参数
+    minuit.FixParameter(3);
+  // 设置初始参数值和步长
+
+//MWDC1
+    double vstart[7] = {2000.0 , 
+    602, 
+    5000.0 ,
+    50.0, 
+    3.14/2 ,
+    3.14- 25.0/180.0*3.14, 
+    0.0};
+    // MWDC0
+    // double vstart[7] = {2000.0 , 
+    // 768, 
+    // 6000.0 ,
+    // 100, 
+    // 0.00411001 , 
+    // 0.00753156, 
+    // 0.0};
+
+    // etof
+    // double vstart[7] = {2000.0 , 766, 5000.0 ,187.0, 3.14 , 0.0, 1.5709};
+    //MWDC
+
+
+
+    double step[7] = {0.1, 0.1,0.1, 0.1, 0.1, 0.1, 0.1};
+
 
     minuit.DefineParameter(0, "x", vstart[0], step[0], 0 , 0);
     minuit.DefineParameter(1, "y", vstart[1], step[1], 0 ,0);
@@ -181,7 +182,6 @@ int MWDC1_place() {
     minuit.DefineParameter(4, "roll", vstart[4], step[4], 0, 2*M_PI);
     minuit.DefineParameter(5, "pitch", vstart[5], step[5], -M_PI/2, M_PI/2);
     minuit.DefineParameter(6, "yaw", vstart[6], step[6], 0,2* M_PI);
-
     // 执行最小化
     minuit.Migrad();
 
@@ -195,6 +195,7 @@ int MWDC1_place() {
     minuit.GetParameter(5, pitch, step[5]);
     minuit.GetParameter(6, yaw, step[6]);
 
+   
     // 输出最优参数值
     std::cout << "Optimal parameters:" << std::endl;
     std::cout << "x = " << x << std::endl;
@@ -205,26 +206,55 @@ int MWDC1_place() {
     std::cout << "pitch = " << pitch << std::endl;
     std::cout << "yaw = " << yaw << std::endl;
 
-    
-    // 生成旋转矩阵
-    std::vector<std::vector<double>> rotationMatrix = eulerToRotationMatrix(roll, pitch, yaw);
+    return {x, y, z, d, roll, pitch, yaw};
+}
 
-    // 将 x, y, z 和旋转矩阵输出到文本文件
-    std::ofstream outfile("output.txt");
-    outfile << x << " " << y << " " << z << std::endl;
-    for (const auto& row : rotationMatrix) {
-        for (double value : row) {
-            outfile << value << " ";
+
+// 反向旋转矩阵的列向量
+void reverseRotationMatrixColumns(std::vector<std::vector<double>>& rotationMatrix, const std::vector<std::vector<double>>& globalData,double x,double y,double z) {
+    for (int i = 0; i < 3; ++i) {
+        double sum = 0.0;
+        for (int j = 0; j < globalData.size(); ++j) {
+            sum += 
+              rotationMatrix[0][i] * (globalData[j][0]-x) 
+            + rotationMatrix[1][i] * (globalData[j][1]-y) 
+            + rotationMatrix[2][i] * (globalData[j][2]-z);
         }
-        outfile << std::endl;
+        if (sum < 0) {
+            for (int row = 0; row < 3; ++row) {
+                rotationMatrix[0][i] = -rotationMatrix[0][i];
+                rotationMatrix[1][i] = -rotationMatrix[1][i];
+                rotationMatrix[2][i] = -rotationMatrix[2][i];
+            }
+            std::cout << "Column " << i << " was reversed." << std::endl;
+        }
+  
     }
-    outfile.close();
+}
+
+int MWDC1_place() {
+
+    // 读取 mwdc1.txt 文件中的数据
+
+    std::string detectorName = "MWDC1";
+
+    std::string filename1 = "./data_measure/" + detectorName + ".txt";
+    std::vector<double> params = BestPrameter(filename1);
+
+    double x = params[0];
+    double y = params[1];
+    double z = params[2];
+    double d = params[3];
+    double roll = params[4];
+    double pitch = params[5];
+    double yaw = params[6];
 
 
-    std::vector<double> chi2_values = chi2(x,y,z,d,roll,pitch,yaw,globalData);
+ std::vector<double> chi2_values = chi2(x,y,z,d,roll,pitch,yaw,globalData);
 
         // 创建 ROOT 文件
-    TFile *file = new TFile("./root_chi2/MWDC1_chi2_values.root", "RECREATE");
+    std::string filename2 = "./root_chi2/" + detectorName + "_chi2_values.root";
+    TFile *file = new TFile(filename2.c_str(), "RECREATE");
 
     // 创建 TTree
     TTree *tree = new TTree("chi2_tree", "Chi2 Values Tree");
@@ -238,12 +268,39 @@ int MWDC1_place() {
     // 填充 TTree
     for (double value : chi2_values) {
         chi2_value = value;
+        std::cout << "chi2" <<detectorName<<" "  << chi2_value << std::endl;
         tree->Fill();
     }
 
     // 写入 ROOT 文件
     tree->Write();
     file->Close();
+
+    
+    // 生成旋转矩阵
+    std::vector<std::vector<double>> rotationMatrix = eulerToRotationMatrix(roll, pitch, yaw);
+
+// 反向旋转矩阵的列向量
+    reverseRotationMatrixColumns(rotationMatrix, globalData,x,y,z);
+
+    x= x + rotationMatrix[0][0] * 38.1 + rotationMatrix[0][1] * 138.1 + rotationMatrix[0][2] * 38.1;
+    y= y + rotationMatrix[1][0] * 38.1 + rotationMatrix[1][1] * 138.1 + rotationMatrix[1][2] * 38.1;
+    z= z + rotationMatrix[2][0] * 38.1 + rotationMatrix[2][1] * 138.1 + rotationMatrix[2][2] * 38.1;
+
+
+    // 将 x, y, z 和旋转矩阵输出到文本文件
+    std::ofstream outfile("output_" + detectorName+".txt");
+    outfile << x << " " << y << " " << z << std::endl;
+    for (const auto& row : rotationMatrix) {
+        for (double value : row) {
+            outfile << value << " ";
+        }
+        outfile << std::endl;
+    }
+    outfile.close();
+
+
+   
 
 
     return 0;
