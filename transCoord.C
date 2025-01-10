@@ -9,6 +9,7 @@
 #include <iostream>
 #include <vector>
 #include <TColor.h>
+#include <TVector3.h>
 #include <TMinuit.h>
 #include <TFile.h>
 #include <TTree.h>
@@ -23,7 +24,7 @@ std::vector<std::vector<double>> readDirectionTarget(const std::string& filename
     return data1;
 }
 
-std::vector<double> trans_MWDC_to_Local(std::string detectorName,std::vector<double> coord)
+TVector3 trans_MWDC_to_Local(std::string detectorName,TVector3 coord)
 {   
     std::string directionFilename = "direction_" + detectorName + ".txt";
     const std::vector<std::vector<double>> data = readDirectionTarget(directionFilename);
@@ -42,11 +43,13 @@ std::vector<double> trans_MWDC_to_Local(std::string detectorName,std::vector<dou
 }
 
 
-std::vector<double> transCoord()
+TVector3 transCoord()
 {
     std::string detectorName ="MWDC1";
-    std::vector<double> coord = {0,0,0};
-    std::vector<double> coord_local = trans_MWDC_to_Local(detectorName,coord);
+    TVector3 coord = {0,0,0};
+    TVector3 coord_local = trans_MWDC_to_Local(detectorName,coord);
+
+    std::cout << "The local coordinate is: " << coord_local[0] << " " << coord_local[1] << " " << coord_local[2] << std::endl;
     
     return coord_local;
 }
